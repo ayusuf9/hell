@@ -9,6 +9,8 @@ import hashlib
 import logging
 from quanthub.util import llm
 import pickle
+import faiss
+import numpy as np
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +25,7 @@ def get_file_hash(file_path):
         file_hash = hashlib.md5(f.read()).hexdigest()
     return file_hash
 
-def create_embeddings(text):
+def create_embedding(text):
     response = openai.Embedding.create(
         model="text-embedding-ada-002",
         deployment_id="text-embedding-ada-002",
@@ -44,32 +46,22 @@ def process_pdf(file_path, cache_dir="./pdf_cache"):
             with open(pkl_path, "rb") as f:
                 stored_data = pickle.load(f)
             
-            # Check if stored_data is a tuple or dict and handle accordingly
-            if isinstance(stored_data, tuple) and len(stored_data) == 2:
-                docstore, index_to_docstore_id = stored_data
-            elif isinstance(stored_data, dict):
-                docstore = stored_data.get("docstore")
-                index_to_docstore_id = stored_data.get("index_to_docstore_id")
+            if isinstance(stored_data, dict) and "docstore" in stored_data and "index_to_docstore_id" in stored_data:
+                docstore = stored_data["docstore"]
+                index_to_docstore_id = stored_data["index_to_docstore_id"]
+                index = faiss.read_index(str(index_path))
+                vectorstore = FAISS(create_embedding, index, docstore, index_to_docstore_id)
+                logger.info("Successfully loaded existing index")
+                return vectorstore
             else:
-                raise ValueError("Unexpected data structure in pickle file")
-
-            vectorstore = FAISS.load_local(
-                str(cache_dir),
-                embeddings=create_embeddings,
-                index_name=f"{file_hash}_index",
-                allow_dangerous_deserialization=True
-            )
-            # Manually set docstore and index_to_docstore_id if they exist
-            if docstore and index_to_docstore_id:
-                vectorstore.docstore = docstore
-                vectorstore.index_to_docstore_id = index_to_docstore_id
+                logger.warning("Stored data format is incorrect. Creating new index.")
+                return create_new_index(file_path, cache_dir, file_hash)
         except Exception as e:
             logger.error(f"Error loading existing index: {str(e)}. Creating new index.")
             return create_new_index(file_path, cache_dir, file_hash)
     else:
+        logger.info("No existing index found. Creating new index.")
         return create_new_index(file_path, cache_dir, file_hash)
-
-    return vectorstore
 
 def create_new_index(file_path, cache_dir, file_hash):
     logger.info(f"Creating new index for {file_hash}")
@@ -83,16 +75,36 @@ def create_new_index(file_path, cache_dir, file_hash):
     )
 
     texts = text_splitter.split_documents(pages)
-    vectorstore = FAISS.from_documents(texts, create_embeddings)
-    vectorstore.save_local(str(cache_dir), index_name=f"{file_hash}_index")
+    
+    # Create embeddings
+    text_embeddings = [create_embedding(t.page_content) for t in texts]
+    
+    # Create FAISS index
+    dimension = len(text_embeddings[0])
+    index = faiss.IndexFlatL2(dimension)
+    index.add(np.array(text_embeddings))
+
+    # Create docstore and index_to_docstore_id
+    docstore = {}
+    index_to_docstore_id = {}
+    for i, text in enumerate(texts):
+        id = str(i)
+        docstore[id] = text
+        index_to_docstore_id[i] = id
+
+    vectorstore = FAISS(create_embedding, index, docstore, index_to_docstore_id)
+    
+    # Save the FAISS index
+    faiss.write_index(index, str(cache_dir / f"{file_hash}_index.faiss"))
     
     # Save docstore and index_to_docstore_id separately
     with open(cache_dir / f"{file_hash}_index.pkl", "wb") as f:
         pickle.dump({
-            "docstore": vectorstore.docstore,
-            "index_to_docstore_id": vectorstore.index_to_docstore_id
+            "docstore": docstore,
+            "index_to_docstore_id": index_to_docstore_id
         }, f)
     
+    logger.info("New index created and saved successfully")
     return vectorstore
 
 # Cell 3: Query Engine Setup
@@ -126,7 +138,6 @@ def get_query_engine(vectorstore):
     return qa_chain
 
 # Cell 4: Process PDF and Create Query Engine
-# Replace 'path/to/your/pdf/file.pdf' with the actual path to your PDF file
 pdf_path = '/users/CFII_DataScience/USERs/SPTADM/test_llm/doc.pdf'
 vectorstore = process_pdf(pdf_path)
 
