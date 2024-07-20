@@ -40,29 +40,59 @@ def process_pdf(file_path, cache_dir="./pdf_cache"):
 
     if index_path.exists() and pkl_path.exists():
         logger.info(f"Loading existing index for {file_hash}")
-        vectorstore = FAISS.load_local(
-            str(cache_dir),
-            embeddings=create_embeddings,
-            index_name=f"{file_hash}_index",
-            allow_dangerous_deserialization=True
-        )
+        try:
+            with open(pkl_path, "rb") as f:
+                stored_data = pickle.load(f)
+            
+            # Check if stored_data is a tuple or dict and handle accordingly
+            if isinstance(stored_data, tuple) and len(stored_data) == 2:
+                docstore, index_to_docstore_id = stored_data
+            elif isinstance(stored_data, dict):
+                docstore = stored_data.get("docstore")
+                index_to_docstore_id = stored_data.get("index_to_docstore_id")
+            else:
+                raise ValueError("Unexpected data structure in pickle file")
+
+            vectorstore = FAISS.load_local(
+                str(cache_dir),
+                embeddings=create_embeddings,
+                index_name=f"{file_hash}_index",
+                allow_dangerous_deserialization=True
+            )
+            # Manually set docstore and index_to_docstore_id if they exist
+            if docstore and index_to_docstore_id:
+                vectorstore.docstore = docstore
+                vectorstore.index_to_docstore_id = index_to_docstore_id
+        except Exception as e:
+            logger.error(f"Error loading existing index: {str(e)}. Creating new index.")
+            return create_new_index(file_path, cache_dir, file_hash)
     else:
-        logger.info(f"Creating new index for {file_hash}")
-        loader = PyPDFLoader(file_path)
-        pages = loader.load_and_split()
+        return create_new_index(file_path, cache_dir, file_hash)
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
+    return vectorstore
 
-        texts = text_splitter.split_documents(pages)
-        vectorstore = FAISS.from_documents(texts, create_embeddings)
-        vectorstore.save_local(str(cache_dir), index_name=f"{file_hash}_index")
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"hash": file_hash}, f)
+def create_new_index(file_path, cache_dir, file_hash):
+    logger.info(f"Creating new index for {file_hash}")
+    loader = PyPDFLoader(file_path)
+    pages = loader.load_and_split()
 
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+        length_function=len,
+    )
+
+    texts = text_splitter.split_documents(pages)
+    vectorstore = FAISS.from_documents(texts, create_embeddings)
+    vectorstore.save_local(str(cache_dir), index_name=f"{file_hash}_index")
+    
+    # Save docstore and index_to_docstore_id separately
+    with open(cache_dir / f"{file_hash}_index.pkl", "wb") as f:
+        pickle.dump({
+            "docstore": vectorstore.docstore,
+            "index_to_docstore_id": vectorstore.index_to_docstore_id
+        }, f)
+    
     return vectorstore
 
 # Cell 3: Query Engine Setup
@@ -97,7 +127,7 @@ def get_query_engine(vectorstore):
 
 # Cell 4: Process PDF and Create Query Engine
 # Replace 'path/to/your/pdf/file.pdf' with the actual path to your PDF file
-pdf_path = 'path/to/your/pdf/file.pdf'
+pdf_path = '/users/CFII_DataScience/USERs/SPTADM/test_llm/doc.pdf'
 vectorstore = process_pdf(pdf_path)
 
 if vectorstore:
