@@ -5,12 +5,14 @@ from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
+from langchain.llms.base import LLM
 import hashlib
 import logging
 from quanthub.util import llm
 import pickle
 import faiss
 import numpy as np
+from typing import Any, List, Optional
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Get the OpenAI client using your custom method
 openai = llm.get_llm_client(llm.GPT_4_MODEL)
 
-# Cell 2: Helper Functions
+# Cell 2: Helper Functions and Classes
 def get_file_hash(file_path):
     with open(file_path, "rb") as f:
         file_hash = hashlib.md5(f.read()).hexdigest()
@@ -33,12 +35,43 @@ def create_embedding(text):
     )
     return response["data"][0]["embedding"]
 
+class EmbeddingFunction:
+    def __call__(self, text):
+        return create_embedding(text)
+
+class CustomLLM(LLM):
+    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
+        try:
+            response = openai.ChatCompletion.create(
+                model=llm.GPT_35_16K_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=250,
+                temperature=0.3
+            )
+            answer = response.choices[0].message['content'].strip()
+            usage = response['usage']['total_tokens']
+            cost = float(usage) / 1000 * 0.03
+            logger.info(f"Tokens: {usage}, Cost of Call: ${cost}")
+            return answer
+        except Exception as e:
+            logger.error(f"Error in CustomLLM: {str(e)}")
+            return "I'm sorry, but I encountered an error while processing your request."
+
+    @property
+    def _llm_type(self) -> str:
+        return "custom_llm"
+
 def process_pdf(file_path, cache_dir="./pdf_cache"):
     file_hash = get_file_hash(file_path)
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     index_path = cache_dir / f"{file_hash}_index.faiss"
     pkl_path = cache_dir / f"{file_hash}_index.pkl"
+
+    embedding_func = EmbeddingFunction()
 
     if index_path.exists() and pkl_path.exists():
         logger.info(f"Loading existing index for {file_hash}")
@@ -50,20 +83,20 @@ def process_pdf(file_path, cache_dir="./pdf_cache"):
                 docstore = stored_data["docstore"]
                 index_to_docstore_id = stored_data["index_to_docstore_id"]
                 index = faiss.read_index(str(index_path))
-                vectorstore = FAISS(create_embedding, index, docstore, index_to_docstore_id)
+                vectorstore = FAISS(embedding_func, index, docstore, index_to_docstore_id)
                 logger.info("Successfully loaded existing index")
                 return vectorstore
             else:
                 logger.warning("Stored data format is incorrect. Creating new index.")
-                return create_new_index(file_path, cache_dir, file_hash)
+                return create_new_index(file_path, cache_dir, file_hash, embedding_func)
         except Exception as e:
             logger.error(f"Error loading existing index: {str(e)}. Creating new index.")
-            return create_new_index(file_path, cache_dir, file_hash)
+            return create_new_index(file_path, cache_dir, file_hash, embedding_func)
     else:
         logger.info("No existing index found. Creating new index.")
-        return create_new_index(file_path, cache_dir, file_hash)
+        return create_new_index(file_path, cache_dir, file_hash, embedding_func)
 
-def create_new_index(file_path, cache_dir, file_hash):
+def create_new_index(file_path, cache_dir, file_hash, embedding_func):
     logger.info(f"Creating new index for {file_hash}")
     loader = PyPDFLoader(file_path)
     pages = loader.load_and_split()
@@ -92,7 +125,7 @@ def create_new_index(file_path, cache_dir, file_hash):
         docstore[id] = text
         index_to_docstore_id[i] = id
 
-    vectorstore = FAISS(create_embedding, index, docstore, index_to_docstore_id)
+    vectorstore = FAISS(embedding_func, index, docstore, index_to_docstore_id)
     
     # Save the FAISS index
     faiss.write_index(index, str(cache_dir / f"{file_hash}_index.faiss"))
@@ -109,28 +142,10 @@ def create_new_index(file_path, cache_dir, file_hash):
 
 # Cell 3: Query Engine Setup
 def get_query_engine(vectorstore):
-    def custom_gpt(prompt):
-        try:
-            response = openai.ChatCompletion.create(
-                model=llm.GPT_35_16K_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=250,
-                temperature=0.3
-            )
-            answer = response.choices[0].message['content'].strip()
-            usage = response['usage']['total_tokens']
-            cost = float(usage) / 1000 * 0.03
-            logger.info(f"Tokens: {usage}, Cost of Call: ${cost}")
-            return answer
-        except Exception as e:
-            logger.error(f"Error in custom_gpt: {str(e)}")
-            return "I'm sorry, but I encountered an error while processing your request."
+    custom_llm = CustomLLM()
 
     qa_chain = RetrievalQA.from_chain_type(
-        llm=custom_gpt,
+        llm=custom_llm,
         chain_type="stuff",
         retriever=vectorstore.as_retriever(search_kwargs={"k": 5}),
     )
