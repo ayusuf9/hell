@@ -5,26 +5,38 @@ import streamlit as st
 from pathlib import Path
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.llms import OpenAI
+from langchain.llms import AzureOpenAI
 from langchain.chains import RetrievalQA
-from langchain_community.chat_models import ChatOpenAI
+from langchain_community.chat_models import AzureChatOpenAI
 import hashlib
 import logging
 from tqdm import tqdm
 from langchain.vectorstores import Chroma
 import pickle
+from langchain.embeddings.base import Embeddings
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Custom Azure OpenAI Embeddings class
+class AzureOpenAIEmbeddings(Embeddings):
+    def __init__(self, azure_openai_client, model="text-embedding-ada-002"):
+        self.client = azure_openai_client
+        self.model = model
+
+    def embed_documents(self, texts):
+        return [self.embed_query(text) for text in texts]
+
+    def embed_query(self, text):
+        return self.client.embeddings.create(input=text, model=self.model).data[0].embedding
 
 def get_file_hash(file_path):
     with open(file_path, "rb") as file:
         file_hash = hashlib.md5(file.read()).hexdigest()
     return file_hash
 
-def process_pdf(file_path):
+def process_pdf(file_path, llm):
     file_hash = get_file_hash(file_path)
     cache_dir = Path(f"./cache/{file_hash}")
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -36,7 +48,8 @@ def process_pdf(file_path):
     if chroma_persist_dir.exists() and texts_cache_path.exists():
         logger.info(f"Loading from cache: {cache_dir}")
         try:
-            embeddings = OpenAIEmbeddings()
+            openai_client = llm.get_azure_openai_client()
+            embeddings = AzureOpenAIEmbeddings(openai_client)
             vectorstore = Chroma(persist_directory=str(chroma_persist_dir), embedding_function=embeddings)
             with open(texts_cache_path, "rb") as f:
                 texts = pickle.load(f)
@@ -71,7 +84,8 @@ def process_pdf(file_path):
         with open(texts_cache_path, "wb") as f:
             pickle.dump(all_texts, f)
 
-        embeddings = OpenAIEmbeddings()
+        openai_client = llm.get_azure_openai_client()
+        embeddings = AzureOpenAIEmbeddings(openai_client)
         
         # Create and persist Chroma vectorstore
         vectorstore = Chroma.from_documents(
@@ -89,9 +103,7 @@ def process_pdf(file_path):
         logger.error(f"An error occurred while processing the PDF: {str(e)}")
         return None, None
 
-def get_query_engine(vectorstore):
-    llm = ChatOpenAI(temperature=0.0, model_name="gpt-4-1106-preview")
-    
+def get_query_engine(vectorstore, llm):
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="map_reduce",
@@ -99,18 +111,26 @@ def get_query_engine(vectorstore):
     )
     return qa_chain
 
-def ask_question(question, vectorstore):
-    qa_chain = get_query_engine(vectorstore)
+def ask_question(question, vectorstore, llm):
+    qa_chain = get_query_engine(vectorstore, llm)
     response = qa_chain.invoke({"query": question})
     return response["result"]
 
 # Main execution
 pdf_path = '/Users/ayusuf/Desktop/Finance /Cohere/annualreport-2023.pdf'
-vectorstore, texts = process_pdf(pdf_path)
+
+# Initialize Azure OpenAI
+llm = AzureChatOpenAI(
+    openai_api_version="2023-05-15",
+    azure_deployment="your-deployment-name",
+    temperature=0
+)
+
+vectorstore, texts = process_pdf(pdf_path, llm)
 
 def get_answer(question):
     if vectorstore:
-        answer = ask_question(question, vectorstore)
+        answer = ask_question(question, vectorstore, llm)
         print(f"Q: {question}\nA: {answer}\n")
     else:
         print("PDF not processed successfully. Please check the file path and try again.")
