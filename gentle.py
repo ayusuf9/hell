@@ -4,6 +4,7 @@ from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 import pandas as pd
 from datetime import datetime, timedelta
+import random
 
 # Generate sample data
 def generate_sample_data():
@@ -12,11 +13,24 @@ def generate_sample_data():
     prices = [1.43, 1.38, 1.65, 1.41, 1.52, 1.36, 1.32, 1.25, 1.2, 0.9, 0.98, 0.84, 0.81, 0.91, 0.86, 0.8, 0.85, 0.84, 0.82, 0.87, 0.86, 0.75, 0.72, 0.76, 0.74, 0.73]
     prices = prices + [prices[-1] + (random.random() - 0.5) * 0.1 for _ in range(70)]
     volumes = [random.randint(5, 25) / 100 for _ in range(96)]
+    
+    countries = ['France', 'Germany', 'Italy', 'Spain', 'United Kingdom']
+    regions = {
+        'France': 'Western Europe',
+        'Germany': 'Western Europe',
+        'Italy': 'Southern Europe',
+        'Spain': 'Southern Europe',
+        'United Kingdom': 'Northern Europe'
+    }
+    
     df = pd.DataFrame({
         'Date': date_range,
         'Price': prices,
-        'Volume': volumes
+        'Volume': volumes,
+        'Country': [random.choice(countries) for _ in range(96)]
     })
+    df['Region'] = df['Country'].map(regions)
+    
     return df
 
 # Initialize the Dash app
@@ -60,6 +74,18 @@ app.layout = html.Div([
             ],
             value='line',
             style={'width': '100px'}
+        ),
+        dcc.Dropdown(
+            id='country-dropdown',
+            options=[{'label': 'All', 'value': 'All'}] + [{'label': country, 'value': country} for country in df['Country'].unique()],
+            value='All',
+            style={'width': '150px'}
+        ),
+        dcc.Dropdown(
+            id='region-dropdown',
+            options=[{'label': 'All', 'value': 'All'}] + [{'label': region, 'value': region} for region in df['Region'].unique()],
+            value='All',
+            style={'width': '150px'}
         )
     ], style={'display': 'flex', 'justifyContent': 'space-between', 'margin': '20px'}),
     
@@ -75,10 +101,17 @@ app.layout = html.Div([
     [Input('date-picker-range', 'start_date'),
      Input('date-picker-range', 'end_date'),
      Input('interval-dropdown', 'value'),
-     Input('chart-type-dropdown', 'value')]
+     Input('chart-type-dropdown', 'value'),
+     Input('country-dropdown', 'value'),
+     Input('region-dropdown', 'value')]
 )
-def update_chart(start_date, end_date, interval, chart_type):
+def update_chart(start_date, end_date, interval, chart_type, country, region):
     filtered_df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
+    
+    if country != 'All':
+        filtered_df = filtered_df[filtered_df['Country'] == country]
+    if region != 'All':
+        filtered_df = filtered_df[filtered_df['Region'] == region]
     
     if chart_type == 'line':
         trace = go.Scatter(x=filtered_df['Date'], y=filtered_df['Price'], mode='lines+markers')
