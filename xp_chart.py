@@ -20,6 +20,14 @@ def generate_sample_data():
         'United Kingdom': 'Northern Europe'
     }
     
+    country_info = {
+        'France': 'Capital: Paris, Language: French',
+        'Germany': 'Capital: Berlin, Language: German',
+        'Italy': 'Capital: Rome, Language: Italian',
+        'Spain': 'Capital: Madrid, Language: Spanish',
+        'United Kingdom': 'Capital: London, Language: English'
+    }
+    
     df = pd.DataFrame()
     for stock in stocks:
         stock_data = pd.DataFrame({
@@ -29,6 +37,7 @@ def generate_sample_data():
             'Country': [random.choice(countries) for _ in range(96)]
         })
         stock_data['Region'] = stock_data['Country'].map(regions)
+        stock_data['CountryInfo'] = stock_data['Country'].map(country_info)
         df = pd.concat([df, stock_data])
     
     return df
@@ -38,6 +47,40 @@ app = dash.Dash(__name__)
 
 # Generate sample data
 df = generate_sample_data()
+
+# Custom CSS for the tooltip
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            .tooltip {
+                position: absolute;
+                padding: 10px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                border-radius: 5px;
+                pointer-events: none;
+                z-index: 1000;
+                font-family: Arial, sans-serif;
+                max-width: 200px;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
 
 # Define the layout
 app.layout = html.Div([
@@ -88,6 +131,8 @@ app.layout = html.Div([
     ], style={'display': 'flex', 'justifyContent': 'space-between', 'margin': '20px'}),
     
     dcc.Graph(id='stock-chart'),
+    
+    html.Div(id='tooltip', style={'display': 'none'}, className='tooltip')
 ])
 
 @app.callback(
@@ -114,7 +159,9 @@ def update_chart(start_date, end_date, interval, country, region, stocks):
             x=stock_data['Date'],
             y=stock_data['Price'],
             mode='lines',
-            name=stock
+            name=stock,
+            hoverinfo='none',
+            customdata=stock_data[['Stock', 'Price', 'Country', 'Region', 'CountryInfo']].to_dict('records')
         )
         traces.append(trace)
     
@@ -122,10 +169,38 @@ def update_chart(start_date, end_date, interval, country, region, stocks):
         title='Stock Prices',
         yaxis=dict(title='Price (USD)'),
         legend=dict(orientation='h', y=1.1),
-        showlegend=True
+        showlegend=True,
+        hovermode='closest'
     )
     
     return {'data': traces, 'layout': layout}
+
+app.clientside_callback(
+    """
+    function(hover_data, points, states) {
+        if(points) {
+            var point = points.points[0];
+            var data = point.customdata;
+            var content = `
+                <strong>${data.Stock}</strong><br>
+                Price: $${data.Price.toFixed(2)}<br>
+                Country: ${data.Country}<br>
+                Region: ${data.Region}<br>
+                ${data.CountryInfo}
+            `;
+            return [content, point.x, point.y, true];
+        }
+        return ['', null, null, false];
+    }
+    """,
+    Output('tooltip', 'children'),
+    Output('tooltip', 'style.left'),
+    Output('tooltip', 'style.top'),
+    Output('tooltip', 'style.display'),
+    Input('stock-chart', 'hoverData'),
+    Input('stock-chart', 'clickData'),
+    State('stock-chart', 'figure')
+)
 
 if __name__ == '__main__':
     app.run_server(debug=True)
