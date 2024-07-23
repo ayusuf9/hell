@@ -209,3 +209,58 @@ app.clientside_callback(
 
 if __name__ == '__main__':
     app.run_server(debug=True)
+
+
+
+# Replace the existing clientside_callback with this updated version:
+
+app.clientside_callback(
+    """
+    function(hoverData, clickData, figure) {
+        const tooltip = document.getElementById('tooltip');
+        if(hoverData && hoverData.points.length) {
+            var point = hoverData.points[0];
+            var data = point.customdata;
+            var content = `
+                <strong>${data.Stock}</strong><br>
+                Price: $${data.Price.toFixed(2)}<br>
+                Country: ${data.Country}<br>
+                Region: ${data.Region}<br>
+                ${data.CountryInfo}
+            `;
+            
+            // Get the chart's DOM element
+            var chartElement = document.getElementById('stock-chart');
+            var rect = chartElement.getBoundingClientRect();
+            
+            // Calculate position relative to the chart
+            var x = point.x + rect.left;
+            var y = point.y + rect.top;
+
+            // Adjust tooltip position to avoid edge overflow
+            var tooltipRect = tooltip.getBoundingClientRect();
+            if (x + tooltipRect.width > window.innerWidth) {
+                x = x - tooltipRect.width - 10;
+            }
+            if (y + tooltipRect.height > window.innerHeight) {
+                y = y - tooltipRect.height - 10;
+            }
+
+            return [
+                content,
+                {
+                    'display': 'block',
+                    'left': `${x}px`,
+                    'top': `${y}px`
+                }
+            ];
+        }
+        return ['', {'display': 'none'}];
+    }
+    """,
+    Output('tooltip', 'children'),
+    Output('tooltip', 'style'),
+    Input('stock-chart', 'hoverData'),
+    Input('stock-chart', 'clickData'),
+    State('stock-chart', 'figure')
+)
