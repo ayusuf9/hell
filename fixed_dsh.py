@@ -22,115 +22,86 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 df = data.copy()
 
-# Custom CSS for improved layout and interactivity
-app.index_string = '''
-<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>{%title%}</title>
-        {%favicon%}
-        {%css%}
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-            }
-            .filter-container {
-                display: flex;
-                align-items: flex-end;
-                gap: 20px;
-                margin: 20px 0;
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                padding-bottom: 10px;
-                position: relative;
-                z-index: 1000;
-            }
-            .filter-item {
-                flex: 1;
-                min-width: 150px;
-            }
-            .filter-item label {
-                display: block;
-                margin-bottom: 5px;
-            }
-            .DateRangePickerInput, .Select-control, .DateInput_input {
-                z-index: 1001;
-            }
-            .DateRangePicker_picker {
-                z-index: 1002 !important;
-            }
-            .Select-menu-outer {
-                z-index: 1003 !important;
-            }
-            @media (max-width: 1200px) {
-                .filter-container {
-                    flex-wrap: wrap;
-                }
-                .filter-item {
-                    flex-basis: calc(50% - 10px);
-                }
-            }
-            @media (max-width: 600px) {
-                .filter-item {
-                    flex-basis: 100%;
-                }
-            }
-        </style>
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-        </footer>
-    </body>
-</html>
-'''
+# Define styles
+styles = {
+    'container': {
+        'margin': '20px',
+        'fontFamily': 'Arial, sans-serif'
+    },
+    'header': {
+        'backgroundColor': '#3366cc',
+        'color': 'white',
+        'padding': '20px',
+        'marginBottom': '20px'
+    },
+    'filter_container': {
+        'display': 'flex',
+        'flexWrap': 'wrap',
+        'gap': '20px',
+        'marginBottom': '20px',
+        'zIndex': 1000,
+        'position': 'relative'
+    },
+    'filter_item': {
+        'flex': '1',
+        'minWidth': '200px',
+        'zIndex': 1000
+    },
+    'label': {
+        'marginBottom': '5px',
+        'fontWeight': 'bold'
+    },
+    'dropdown': {
+        'zIndex': 1001
+    }
+}
 
 # Define the layout
-app.layout = html.Div([
-    html.Div([
+app.layout = html.Div(style=styles['container'], children=[
+    html.Div(style=styles['header'], children=[
         html.H1("China Exposure Tool"),
-        html.P("Enhanced Filtering Demo", style={'color': 'white'}),
-    ], style={'background-color': '#3366cc', 'color': 'white', 'padding': '20px'}),
+        html.P("Enhanced Filtering Demo")
+    ]),
     
-    html.Div([
-        html.Div([
-            html.Label("Date Range"),
+    html.Div(style=styles['filter_container'], children=[
+        html.Div(style=styles['filter_item'], children=[
+            html.Label("Date Range", style=styles['label']),
             dcc.DatePickerRange(
                 id='date-picker-range',
                 start_date=df['Date'].min(),
                 end_date=df['Date'].max(),
-                display_format='YYYY-MM-DD'
+                display_format='YYYY-MM-DD',
+                style={'zIndex': 1001}
             )
-        ], className='filter-item'),
-        html.Div([
-            html.Label("Market"),
+        ]),
+        html.Div(style=styles['filter_item'], children=[
+            html.Label("Market", style=styles['label']),
             dcc.Dropdown(
                 id='market-dropdown',
                 options=[{'label': 'All Markets', 'value': 'All Markets'}] + 
                         [{'label': market.capitalize(), 'value': market} for market in df['market_type'].unique()],
-                value='All Markets'
+                value='All Markets',
+                style=styles['dropdown']
             )
-        ], className='filter-item'),
-        html.Div([
-            html.Label("Country"),
+        ]),
+        html.Div(style=styles['filter_item'], children=[
+            html.Label("Country", style=styles['label']),
             dcc.Dropdown(
-                id='country-dropdown'
+                id='country-dropdown',
+                style=styles['dropdown']
             )
-        ], className='filter-item'),
-        html.Div([
-            html.Label("Security"),
+        ]),
+        html.Div(style=styles['filter_item'], children=[
+            html.Label("Security", style=styles['label']),
             dcc.Dropdown(
                 id='security-dropdown',
-                multi=True
+                multi=True,
+                style=styles['dropdown']
             )
-        ], className='filter-item'),
-    ], className='filter-container'),
+        ]),
+    ]),
     
-    dcc.Graph(id='security-chart'),
+    dcc.Graph(id='security-chart')
 ])
 
 @app.callback(
