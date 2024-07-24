@@ -18,7 +18,7 @@ data['security'] = data['security_name'].astype(str) + " (" + data['sedol'].asty
 data['country_exposure_pct'] = data['country_exposure(pct)']
 
 # Initializing the Dash app
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 df = data.copy()
 
@@ -32,6 +32,9 @@ app.index_string = '''
         {%favicon%}
         {%css%}
         <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
             .filter-container {
                 display: flex;
                 align-items: flex-end;
@@ -40,18 +43,25 @@ app.index_string = '''
                 flex-wrap: nowrap;
                 overflow-x: auto;
                 padding-bottom: 10px;
+                position: relative;
+                z-index: 1000;
             }
             .filter-item {
                 flex: 1;
                 min-width: 150px;
-                z-index: 1000;
             }
             .filter-item label {
                 display: block;
                 margin-bottom: 5px;
             }
-            .DateRangePickerInput, .Select-control {
-                z-index: 1000;
+            .DateRangePickerInput, .Select-control, .DateInput_input {
+                z-index: 1001;
+            }
+            .DateRangePicker_picker {
+                z-index: 1002 !important;
+            }
+            .Select-menu-outer {
+                z-index: 1003 !important;
             }
             @media (max-width: 1200px) {
                 .filter-container {
