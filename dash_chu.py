@@ -38,7 +38,7 @@ app.layout = html.Div([
             id='date-picker-range',
             start_date=df['Date'].min(),
             end_date=df['Date'].max(),
-            display_format='YYYY-MM'
+            display_format='YYYY-MM-DD'
         ),
         dcc.Dropdown(
             id='market-dropdown',
@@ -49,7 +49,7 @@ app.layout = html.Div([
         dcc.Dropdown(
             id='country-dropdown',
             options=[{'label': 'All', 'value': 'All'}] + [{'label': country, 'value': country} for country in df['iso_country_symbol'].unique()],
-            value='Countries',
+            value='All',
             style={'width': '150px'}
         ),
         dcc.Dropdown(
@@ -92,9 +92,13 @@ def update_dropdown_options(n_clicks, current_options):
      Input('security-dropdown', 'value')]
 )
 def update_chart(start_date, end_date, market, country, securities):
+    # Convert string dates to datetime.date objects
+    start_date = pd.to_datetime(start_date).date()
+    end_date = pd.to_datetime(end_date).date()
+
     filtered_df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
     
-    if market != 'All':
+    if market != 'All Markets':
         filtered_df = filtered_df[filtered_df['market_type'] == market]
     if country != 'All':
         filtered_df = filtered_df[filtered_df['iso_country_symbol'] == country]
@@ -111,10 +115,10 @@ def update_chart(start_date, end_date, market, country, securities):
                 hovertemplate=
                 "<b>%{customdata[0]}</b><br>" +
                 "Date: %{x}<br>" +
-                "Price: $%{y:.2f}<br>" +
-                "Exposure %: %{customdata[1]}<br>" +
+                "Revenue: %{y:.2f}<br>" +
+                "Exposure %: %{customdata[1]:.2f}%<br>" +
                 "Country: %{customdata[2]}<br>" +
-                "%{customdata[3]}<extra></extra>",
+                "SEDOL: %{customdata[3]}<extra></extra>",
                 customdata=security_data[['security', 'country_exposure_pct', 'iso_country_symbol', 'sedol']].values,
                 line=dict(width=3),
                 marker=dict(size=7) 
@@ -124,7 +128,7 @@ def update_chart(start_date, end_date, market, country, securities):
     layout = go.Layout(
         title='Revenue Exposure',
         yaxis=dict(title='Revenue (Exposure)'),
-        xaxis=dict(title='Dates (Exposure)'),
+        xaxis=dict(title='Dates'),
         legend=dict(orientation='h', y=1.1),
         showlegend=True,
         hovermode='closest'
