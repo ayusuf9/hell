@@ -22,7 +22,7 @@ app = dash.Dash(__name__)
 
 df = data.copy()
 
-# Custom CSS for improved layout
+# Custom CSS for improved layout and interactivity
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -39,14 +39,19 @@ app.index_string = '''
                 margin: 20px 0;
                 flex-wrap: nowrap;
                 overflow-x: auto;
+                padding-bottom: 10px;
             }
             .filter-item {
                 flex: 1;
                 min-width: 150px;
+                z-index: 1000;
             }
             .filter-item label {
                 display: block;
                 margin-bottom: 5px;
+            }
+            .DateRangePickerInput, .Select-control {
+                z-index: 1000;
             }
             @media (max-width: 1200px) {
                 .filter-container {
