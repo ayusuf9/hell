@@ -45,8 +45,12 @@ app.layout = html.Div([
         )
     ]),
     html.Div([
-        dcc.Graph(id='country-exposure-pct-graph'),
-        dcc.Graph(id='country-exposure-revenue-graph')
+        html.Div([
+            dcc.Graph(id='country-exposure-pct-graph')
+        ], style={'width': '49%', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Graph(id='country-exposure-revenue-graph')
+        ], style={'width': '49%', 'display': 'inline-block'})
     ])
 ])
 
@@ -77,20 +81,57 @@ def update_graphs(market_type, securities):
     fig_pct = go.Figure()
     fig_revenue = go.Figure()
     
-    for security in securities:
+    for i, security in enumerate(securities):
         security_data = filtered_data[filtered_data['security_name'] == security]
         fig_pct.add_trace(go.Scatter(
             x=security_data['Date'],
             y=security_data['country_exposure_pct'],
             name=security,
-            mode='lines'
+            mode='lines',
+            marker=dict(symbol=i)
         ))
         fig_revenue.add_trace(go.Scatter(
             x=security_data['Date'],
             y=security_data['country_exposure_revenue'],
             name=security,
-            mode='lines'
+            mode='lines',
+            marker=dict(symbol=i)
         ))
+    
+    # Add horizontal lines
+    max_value_pct = filtered_data['country_exposure_pct'].max()
+    min_value_pct = filtered_data['country_exposure_pct'].min()
+    fig_pct.add_trace(go.Scatter(
+        x=[filtered_data['Date'].min(), filtered_data['Date'].max()],
+        y=[max_value_pct + 0.5] * 2,
+        mode='lines',
+        line=dict(color='grey', width=3),
+        showlegend=False
+    ))
+    fig_pct.add_trace(go.Scatter(
+        x=[filtered_data['Date'].min(), filtered_data['Date'].max()],
+        y=[min_value_pct - 0.5] * 2,
+        mode='lines',
+        line=dict(color='grey', width=3),
+        showlegend=False
+    ))
+    
+    max_value_revenue = filtered_data['country_exposure_revenue'].max()
+    min_value_revenue = filtered_data['country_exposure_revenue'].min()
+    fig_revenue.add_trace(go.Scatter(
+        x=[filtered_data['Date'].min(), filtered_data['Date'].max()],
+        y=[max_value_revenue + 0.5] * 2,
+        mode='lines',
+        line=dict(color='grey', width=3),
+        showlegend=False
+    ))
+    fig_revenue.add_trace(go.Scatter(
+        x=[filtered_data['Date'].min(), filtered_data['Date'].max()],
+        y=[min_value_revenue - 0.5] * 2,
+        mode='lines',
+        line=dict(color='grey', width=3),
+        showlegend=False
+    ))
     
     # Update the layout
     fig_pct.update_layout(
@@ -100,7 +141,8 @@ def update_graphs(market_type, securities):
         hovermode="x unified",
         template="plotly_white",
         width=800,
-        height=400
+        height=400,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     fig_revenue.update_layout(
         title_text="Country Exposure (Revenue)",
@@ -109,7 +151,8 @@ def update_graphs(market_type, securities):
         hovermode="x unified",
         template="plotly_white",
         width=800,
-        height=400
+        height=400,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
     return fig_pct, fig_revenue
