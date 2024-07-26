@@ -160,3 +160,74 @@ def update_graphs(market_type, securities):
 # Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
+
+
+
+
+
+# Update the layout
+fig_pct.update_layout(
+    title_text="Country Exposure (%)",
+    xaxis_title="Date",
+    yaxis_title="Country Exposure (%)",
+    hovermode="x unified",
+    template="plotly_white",
+    width=800,
+    height=400,
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    shapes=[
+        dict(
+            type="line",
+            x0=0,
+            y0=max_value_pct * 1.1,
+            x1=1,
+            y1=max_value_pct * 1.1,
+            xref='paper',
+            yref='y',
+            line=dict(color='grey', width=3)
+        ),
+        dict(
+            type="line",
+            x0=0,
+            y0=min_value_pct * 0.9,
+            x1=1,
+            y1=min_value_pct * 0.9,
+            xref='paper',
+            yref='y',
+            line=dict(color='grey', width=3)
+        )
+    ]
+)
+
+fig_revenue.update_layout(
+    title_text="Country Exposure (Revenue)",
+    xaxis_title="Date",
+    yaxis_title="Country Exposure (Revenue)",
+    hovermode="x unified",
+    template="plotly_white",
+    width=800,
+    height=400,
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    shapes=[
+        dict(
+            type="line",
+            x0=0,
+            y0=max_value_revenue * 1.1,
+            x1=1,
+            y1=max_value_revenue * 1.1,
+            xref='paper',
+            yref='y',
+            line=dict(color='grey', width=3)
+        ),
+        dict(
+            type="line",
+            x0=0,
+            y0=min_value_revenue * 0.9,
+            x1=1,
+            y1=min_value_revenue * 0.9,
+            xref='paper',
+            yref='y',
+            line=dict(color='grey', width=3)
+        )
+    ]
+)
