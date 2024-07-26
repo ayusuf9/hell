@@ -1,132 +1,119 @@
 import dash
-from dash import dcc, html
+import dash_core_components as dcc
+import dash_html_components as html
 from dash.dependencies import Input, Output
-import plotly.graph_objs as go
-from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 import pandas as pd
 
-# Assume data preparation code is already run as provided
+# Load data
+data = pd.read_csv('data.csv')
 
+# Preprocess data
+data['Date'] = pd.to_datetime(data['month_date']).dt.date
+data['Fiscal_Date'] = pd.to_datetime(data['month_fiscal']).dt.to_period('M')
+data['security_name'] = data['security_name'].astype('category')
+data['iso_country_symbol'] = data['iso_country_symbol'].astype('category')
+data['market_type'] = data['market_type'].astype('category')
+data['sedol'] = data['sedol'].astype('category')
+
+data['security'] = data['security_name'].astype(str) + "(" + data['sedol'].astype(str) + ")"
+data['country_exposure_pct'] = data['country_exposure(pct)']
+data['country_exposure_revenue'] = data['country_exposure(revenue)']
+
+# Create a list of unique market types
+market_types = data['market_type'].unique()
+
+# Create a Dash app
 app = dash.Dash(__name__)
 
-# Define color scheme (you may need to adjust this based on the number of securities)
-colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+# Define the layout
+app.layout = html.Div([
+    html.H1('Country Exposure Dashboard'),
+    html.Div([
+        html.Label('Market Type:'),
+        dcc.Dropdown(
+            id='market-type-dropdown',
+            options=[{'label': market_type, 'value': market_type} for market_type in market_types],
+            value=market_types[0]
+        )
+    ]),
+    html.Div([
+        html.Label('Securities:'),
+        dcc.Dropdown(
+            id='securities-dropdown',
+            multi=True
+        )
+    ]),
+    html.Div([
+        dcc.Graph(id='country-exposure-pct-graph'),
+        dcc.Graph(id='country-exposure-revenue-graph')
+    ])
+])
 
-def create_figure(market, securities):
-    filtered_df = data[data['market_type'] == market] if market != 'All Markets' else data
+# Define the callback to update the securities dropdown
+@app.callback(
+    Output('securities-dropdown', 'options'),
+    [Input('market-type-dropdown', 'value')]
+)
+def update_securities_dropdown(market_type):
+    securities = data[data['market_type'] == market_type]['security_name'].unique()
+    return [{'label': security, 'value': security} for security in securities]
+
+# Define the callback to update the graphs
+@app.callback(
+    [Output('country-exposure-pct-graph', 'figure'),
+     Output('country-exposure-revenue-graph', 'figure')],
+    [Input('market-type-dropdown', 'value'),
+     Input('securities-dropdown', 'value')]
+)
+def update_graphs(market_type, securities):
+    if securities is None:
+        securities = []
     
-    fig = make_subplots(rows=1, cols=2, shared_xaxes=True, horizontal_spacing=0.02,
-                        subplot_titles=("Revenue Exposure", "Percentage Revenue Exposure"),
-                        specs=[[{"secondary_y": True}, {"secondary_y": False}]])
-
-    for i, security in enumerate(securities):
-        security_data = filtered_df[filtered_df['security'] == security]
-        
-        # First chart (Revenue)
-        fig.add_trace(go.Scatter(
-            x=security_data['Date'],
-            y=security_data['country_exposure_revenue'],
-            name=security,
-            line=dict(color=colors[i % len(colors)], width=2),
-            legendgroup=f"group{i}",
-            showlegend=True
-        ), row=1, col=1, secondary_y=False)
-
-        # Second chart (Percentage)
-        fig.add_trace(go.Scatter(
+    # Filter the data
+    filtered_data = data[(data['market_type'] == market_type) & (data['security_name'].isin(securities))]
+    
+    # Create the figures
+    fig_pct = go.Figure()
+    fig_revenue = go.Figure()
+    
+    for security in securities:
+        security_data = filtered_data[filtered_data['security_name'] == security]
+        fig_pct.add_trace(go.Scatter(
             x=security_data['Date'],
             y=security_data['country_exposure_pct'],
             name=security,
-            line=dict(color=colors[i % len(colors)], width=2),
-            legendgroup=f"group{i}",
-            showlegend=False
-        ), row=1, col=2)
-
-    # Update layout
-    fig.update_layout(
-        height=600, width=1200,
-        showlegend=True,
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
-        font=dict(family="Arial", size=10),
-        margin=dict(l=50, r=50, t=100, b=50),
-        plot_bgcolor='white',
-    )
-
-    # Update axes
-    fig.update_xaxes(showgrid=True, gridcolor='lightgrey', showline=True, linecolor='black', mirror=True,
-                     rangeslider_visible=False, tickformat="%Y")
-    fig.update_yaxes(showgrid=True, gridcolor='lightgrey', showline=True, linecolor='black', mirror=True,
-                     tickformat=".1f")
-
-    # Specific adjustments for left chart
-    fig.update_yaxes(title_text="Revenue", secondary_y=False, row=1, col=1)
-
-    # Specific adjustments for right chart
-    fig.update_yaxes(title_text="Percentage", row=1, col=2)
-
-    # Add date range buttons
-    fig.update_layout(
-        updatemenus=[
-            dict(
-                type="buttons",
-                direction="right",
-                active=0,
-                x=0.1,
-                y=1.1,
-                buttons=list([
-                    dict(label="1YR", method="relayout", args=[{"xaxis.range": [data['Date'].max() - pd.DateOffset(years=1), data['Date'].max()]}]),
-                    dict(label="5YR", method="relayout", args=[{"xaxis.range": [data['Date'].max() - pd.DateOffset(years=5), data['Date'].max()]}]),
-                    dict(label="10YR", method="relayout", args=[{"xaxis.range": [data['Date'].max() - pd.DateOffset(years=10), data['Date'].max()]}]),
-                    dict(label="Max", method="relayout", args=[{"xaxis.range": [data['Date'].min(), data['Date'].max()]}]),
-                ]),
-            )
-        ]
-    )
-
-    # Add data source information
-    current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-    fig.add_annotation(x=1, y=-0.15, xref='paper', yref='paper', text=f'Data as of: {current_date}', showarrow=False, font=dict(size=10), xanchor='right')
-
-    return fig
-
-app.layout = html.Div([
-    html.Div([
-        dcc.Dropdown(
-            id='market-dropdown',
-            options=[{'label': 'All Markets', 'value': 'All Markets'}] + 
-                    [{'label': market, 'value': market} for market in data['market_type'].unique()],
-            value='All Markets'
-        ),
-        dcc.Dropdown(
-            id='security-dropdown',
-            multi=True
-        )
-    ], style={'width': '50%', 'display': 'inline-block'}),
-    dcc.Graph(id='exposure-charts')
-])
-
-@app.callback(
-    Output('security-dropdown', 'options'),
-    Output('security-dropdown', 'value'),
-    Input('market-dropdown', 'value')
-)
-def update_security_options(selected_market):
-    if selected_market == 'All Markets':
-        filtered_df = data
-    else:
-        filtered_df = data[data['market_type'] == selected_market]
+            mode='lines'
+        ))
+        fig_revenue.add_trace(go.Scatter(
+            x=security_data['Date'],
+            y=security_data['country_exposure_revenue'],
+            name=security,
+            mode='lines'
+        ))
     
-    securities = filtered_df['security'].unique()
-    options = [{'label': security, 'value': security} for security in securities]
-    return options, []  # Start with no securities selected
+    # Update the layout
+    fig_pct.update_layout(
+        title_text="Country Exposure (%)",
+        xaxis_title="Date",
+        yaxis_title="Country Exposure (%)",
+        hovermode="x unified",
+        template="plotly_white",
+        width=800,
+        height=400
+    )
+    fig_revenue.update_layout(
+        title_text="Country Exposure (Revenue)",
+        xaxis_title="Date",
+        yaxis_title="Country Exposure (Revenue)",
+        hovermode="x unified",
+        template="plotly_white",
+        width=800,
+        height=400
+    )
+    
+    return fig_pct, fig_revenue
 
-@app.callback(
-    Output('exposure-charts', 'figure'),
-    Input('market-dropdown', 'value'),
-    Input('security-dropdown', 'value')
-)
-def update_charts(market, securities):
-    return create_figure(market, securities)
-
+# Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
