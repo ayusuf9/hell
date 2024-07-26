@@ -9,60 +9,35 @@ import pandas as pd
 
 app = dash.Dash(__name__)
 
-# Define exact color scheme
-colors = {
-    'CPI': 'rgb(0, 0, 255)',
-    'CPI_Core': 'rgb(255, 0, 0)',
-    'Non_food': 'rgb(128, 128, 128)',
-    'Food': 'rgb(173, 216, 230)',
-    'US': 'rgb(0, 0, 255)',
-    'Japan': 'rgb(255, 0, 0)',
-    'UK': 'rgb(128, 128, 128)',
-    'Germany': 'rgb(173, 216, 230)',
-    'China_World': 'rgb(255, 0, 255)'
-}
+# Define color scheme (you may need to adjust this based on the number of securities)
+colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
 def create_figure(market, securities):
     filtered_df = data[data['market_type'] == market] if market != 'All Markets' else data
     
     fig = make_subplots(rows=1, cols=2, shared_xaxes=True, horizontal_spacing=0.02,
-                        subplot_titles=("China: Consumer price inflation, y/y %", "Consumer price inflation around the world"),
+                        subplot_titles=("Revenue Exposure", "Percentage Revenue Exposure"),
                         specs=[[{"secondary_y": True}, {"secondary_y": False}]])
 
-    # Left chart (China)
-    for i, security in enumerate(securities[:4]):  # Limit to 4 securities for left chart
+    for i, security in enumerate(securities):
         security_data = filtered_df[filtered_df['security'] == security]
         
+        # First chart (Revenue)
         fig.add_trace(go.Scatter(
             x=security_data['Date'],
             y=security_data['country_exposure_revenue'],
             name=security,
-            line=dict(color=list(colors.values())[i], width=2),
+            line=dict(color=colors[i % len(colors)], width=2),
             legendgroup=f"group{i}",
             showlegend=True
         ), row=1, col=1, secondary_y=False)
 
-    # Add Food (RHS) trace with dashed line
-    if len(securities) > 3:
-        security_data = filtered_df[filtered_df['security'] == securities[3]]
+        # Second chart (Percentage)
         fig.add_trace(go.Scatter(
             x=security_data['Date'],
-            y=security_data['country_exposure_revenue'],
-            name=f"{securities[3]} (RHS)",
-            line=dict(color=colors['Food'], width=2, dash='dot'),
-            legendgroup="group3",
-            showlegend=True
-        ), row=1, col=1, secondary_y=True)
-
-    # Right chart (World)
-    for i, security in enumerate(securities):
-        security_data = filtered_df[filtered_df['security'] == security]
-        
-        fig.add_trace(go.Scatter(
-            x=security_data['Date'],
-            y=security_data['country_exposure_revenue'],
+            y=security_data['country_exposure_pct'],
             name=security,
-            line=dict(color=list(colors.values())[i], width=2),
+            line=dict(color=colors[i % len(colors)], width=2),
             legendgroup=f"group{i}",
             showlegend=False
         ), row=1, col=2)
@@ -84,24 +59,10 @@ def create_figure(market, securities):
                      tickformat=".1f")
 
     # Specific adjustments for left chart
-    fig.update_yaxes(title_text="", secondary_y=False, row=1, col=1)
-    fig.update_yaxes(title_text="", secondary_y=True, row=1, col=1, overlaying="y")
+    fig.update_yaxes(title_text="Revenue", secondary_y=False, row=1, col=1)
 
     # Specific adjustments for right chart
-    fig.update_yaxes(title_text="", row=1, col=2)
-    
-    # Add vertical line for 2015 in the right chart
-    fig.add_vline(x="2015-01-01", line_width=1, line_dash="dash", line_color="black", col=2)
-
-    # Add annotations for 2015 values
-    annotations = [
-        dict(x="2015-12-01", y=0.73, xref="x2", yref="y2", text="US : (Dec 2015) 0.73", showarrow=False, font=dict(size=8), xanchor="left", yanchor="bottom"),
-        dict(x="2015-12-01", y=0.20, xref="x2", yref="y2", text="Japan : (Dec 2015) 0.20", showarrow=False, font=dict(size=8), xanchor="left", yanchor="bottom"),
-        dict(x="2015-12-01", y=0.50, xref="x2", yref="y2", text="UK : (Dec 2015) 0.50", showarrow=False, font=dict(size=8), xanchor="left", yanchor="bottom"),
-        dict(x="2015-12-01", y=0.47, xref="x2", yref="y2", text="Germany : (Dec 2015) 0.47", showarrow=False, font=dict(size=8), xanchor="left", yanchor="bottom"),
-        dict(x="2015-12-01", y=1.60, xref="x2", yref="y2", text="China : (Dec 2015) 1.60", showarrow=False, font=dict(size=8), xanchor="left", yanchor="bottom")
-    ]
-    fig.update_layout(annotations=annotations)
+    fig.update_yaxes(title_text="Percentage", row=1, col=2)
 
     # Add date range buttons
     fig.update_layout(
@@ -141,7 +102,7 @@ app.layout = html.Div([
             multi=True
         )
     ], style={'width': '50%', 'display': 'inline-block'}),
-    dcc.Graph(id='inflation-charts')
+    dcc.Graph(id='exposure-charts')
 ])
 
 @app.callback(
@@ -157,10 +118,10 @@ def update_security_options(selected_market):
     
     securities = filtered_df['security'].unique()
     options = [{'label': security, 'value': security} for security in securities]
-    return options, options[:5]  # Select first 5 securities by default
+    return options, []  # Start with no securities selected
 
 @app.callback(
-    Output('inflation-charts', 'figure'),
+    Output('exposure-charts', 'figure'),
     Input('market-dropdown', 'value'),
     Input('security-dropdown', 'value')
 )
