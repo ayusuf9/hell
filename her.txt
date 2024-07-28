@@ -1,0 +1,22 @@
+Let me summarize the issues we've been facing with the compress_legend function:
+
+SITUATION: The compress_legend function is not properly grouping overweight, underweight and the different symbol traces as well as toggles are not working correctly.
+I have made several iterations trying to fix these issues, but without success. 
+
+CURRENT STATE: The most recent version of the function is not working for any of the legend items.
+
+EXPECTATIONS:
+Ensuring that both color-based and symbol-based groupings work simultaneously.
+Implementing the double-click isolation feature without breaking the basic toggle functionality.
+Maintaining the correct visibility states for all traces when toggling different legend items.
+
+YOUR TASK IS TO RE-IMPLEMENT the compress_legend function so that the following can be achieved:
+
+The legend should have separate entries for overweight (green) and underweight (purple).
+It should also have entries for each bond maturity symbol (2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y).
+Clicking on overweight or underweight should toggle all markers of that color, regardless of shape.
+Clicking on a symbol (e.g., 2Y) should toggle all markers of that shape, regardless of color.
+Double-clicking on any legend item should isolate that group, hiding all others.
+
+
+
