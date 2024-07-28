@@ -12,7 +12,8 @@ def compress_legend(fig, group1_base, group2_base, group1_color, group2_color, s
             visible=True
         ))
 
-    # Process existing traces
+    # Process existing traces and create symbol groups
+    symbol_groups = {symbol: [] for symbol in symbol_dict.values()}
     for trace in fig.data[:-2]:  # Exclude the two traces we just added
         if 'marker' in trace:
             if trace.marker.color == group1_color:
@@ -22,7 +23,7 @@ def compress_legend(fig, group1_base, group2_base, group1_color, group2_color, s
             
             if 'symbol' in trace.marker:
                 symbol = trace.marker.symbol
-                trace.legendgrouptitle = dict(text=f"Symbol: {symbol}")
+                symbol_groups[symbol].append(trace)
 
     # Add symbol legend entries
     for value, symbol in symbol_dict.items():
@@ -33,12 +34,16 @@ def compress_legend(fig, group1_base, group2_base, group1_color, group2_color, s
             legendgroup=f"symbol_{symbol}",
             visible=True
         ))
+        # Update all traces with this symbol to be part of this legend group
+        for trace in symbol_groups[symbol]:
+            trace.legendgroup += f"_symbol_{symbol}"
 
     # Update layout for legend grouping
     fig.update_layout(
         legend=dict(
             groupclick="toggleitem",
             itemclick="toggle",
+            itemdoubleclick="toggleothers",
             itemsizing="constant",
             font=dict(size=18),
             orientation="h",
